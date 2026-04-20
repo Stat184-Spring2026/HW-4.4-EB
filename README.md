@@ -1,6 +1,6 @@
 # Stat 184 HW 4.4 Repository 
 
-This repository contains my work for homework 4.3. 
+This repository contains my work from Homework 4.3 in relevance in creating and understanding GitHub for Homework 4.4. 
 
 ## Overview
 
