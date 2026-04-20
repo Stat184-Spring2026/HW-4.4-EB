@@ -1,0 +1,358 @@
+---
+title: "HW: 4.3 Reproducible Data Analysis"
+author: "Eszter Badescu"
+date: "April 15, 2026"
+format: pdf
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+# =========================================================
+# Setup
+# =========================================================
+rm(list = ls())
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(rvest)
+  library(janitor)
+  library(readr)
+  library(knitr)
+})
+
+# =========================================================
+# Busiest Airports Data
+# =========================================================
+wiki_url <- "https://en.wikipedia.org/wiki/List_of_busiest_airports_by_passenger_traffic"
+
+airport_tables <- wiki_url |>
+  read_html() |>
+  html_elements("table.wikitable") |>
+  html_table(fill = TRUE)
+
+years <- 2025:2020
+
+yearly_airport_data <- map2(
+  airport_tables[1:6],
+  years,
+  \(tbl, yr) {
+    tbl |>
+      clean_names() |>
+      mutate(year = yr)
+  }
+) |>
+  list_rbind()
+
+airports_tidy <- yearly_airport_data |>
+  select(year, airport, code_iata_icao, totalpassengers) |>
+  mutate(
+    airport = str_squish(str_remove_all(airport, "\\[.*?\\]")),
+    code_iata_icao = str_squish(str_remove_all(code_iata_icao, "\\[.*?\\]")),
+    totalpassengers = parse_number(totalpassengers)
+  ) |>
+  separate_wider_delim(
+    code_iata_icao,
+    delim = "/",
+    names = c("iata", "icao"),
+    too_few = "align_start"
+  )
+
+selected_airports <- c(
+  "Hartsfield-Jackson Atlanta International Airport",
+  "Frankfurt Airport",
+  "Beijing Daxing International Airport",
+  "Dubai International Airport",
+  "Tokyo Haneda Airport",
+  "Dallas Fort Worth International Airport"
+)
+
+airports_tidy <- airports_tidy |>
+  filter(airport %in% selected_airports) |>
+  rename(total_passengers = totalpassengers) |>
+  mutate(
+    airport = factor(airport, levels = selected_airports)
+  ) |>
+  arrange(airport, year) |>
+  select(year, airport, iata, icao, total_passengers)
+
+# =========================================================
+# Monte Carlo Helper Function
+# =========================================================
+make_mc_plot <- function(n) {
+  set.seed(123)
+  
+  x <- runif(n, min = 0, max = 1)
+  y <- runif(n, min = 0, max = 1.5)
+  
+  curve_y <- dbeta(x, shape1 = 2, shape2 = 2)
+  point_type <- ifelse(y <= curve_y, "On/Below", "Above")
+  
+  plot_data <- tibble(
+    x = x,
+    y = y,
+    point_type = point_type
+  )
+  
+  curve_x <- seq(0, 1, length.out = 200)
+  curve_data <- tibble(
+    x = curve_x,
+    y = dbeta(curve_x, shape1 = 2, shape2 = 2)
+  )
+  
+  ggplot() +
+    geom_point(
+      data = plot_data,
+      aes(x = x, y = y, color = point_type),
+      alpha = 0.5,
+      size = 1.2
+    ) +
+    geom_line(
+      data = curve_data,
+      aes(x = x, y = y),
+      linewidth = 1
+    ) +
+    coord_cartesian(xlim = c(0, 1), ylim = c(0, 1.5)) +
+    labs(
+      title = paste("n =", n),
+      x = "x",
+      y = "y",
+      color = "Point Type"
+    ) +
+    theme_minimal()
+}
+```
+
+# Introduction
+
+In this homework, I will demonstrate reproducible data analysis in R using Quarto. In the first example, I will use imports and cleans data on the busiest airports in the world. In the second example uses a Monte Carlo simulation to estimate the area under a curve.
+
+# Busiest Airports
+
+In this section, I loaded and cleaned the data on the busiest airports from Wikipedia. The goal is to transform raw tables into a tidy data set that includes year, airport name, airport codes, and total passenger counts.
+
+## Table
+
+```{r}
+#| tbl-cap: "Passenger Traffic for Selected Airports (2020–2025)"
+kable(airports_tidy)
+```
+
+## Plot
+
+```{r}
+#| fig-cap: "Passenger Traffic for Selected Airports"
+
+ggplot(airports_tidy, aes(x = year, y = total_passengers, color = airport)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "Year",
+    y = "Total Passengers",
+    color = "Airport"
+  ) +
+  theme_minimal()
+```
+
+## Interpretation
+
+From the table and plot, it shows an increase in passenger traffic from 2020 to 2025 from the selected airports. Meaning, a pattern suggests a recovery in global air travel over time. The Dubai International Airport and Dallas Fort Worth International Airport consistently show high passenger totals, thus; supporting their importance as major international hubs. Beijing Daxing shows a noticeable growth in the later years, suggesting increasing demand and expansion. Overall, the visualization highlights both recovery and continued growth in airport activity. In conclusion, as an increase in passenger traffic increases so does recovery in global air travel.  
+
+# Monte Carlo Simulation
+
+In this section, I used the Monte Carlo simulation in order to estimate the area under a curve. By selecting random points, I generated in a rectangle and the proportion of points that fall below the curve that is used to estimate the area.
+
+## Plot
+
+```{r}
+#| layout-ncol: 2
+#| fig-cap: "Monte Carlo Simulation at Increasing Sample Sizes"
+
+make_mc_plot(100)
+make_mc_plot(500)
+make_mc_plot(1000)
+make_mc_plot(5000)
+```
+
+## Interpretation
+
+Monte Carlo simulation estimates an area by generating random points and checking whether they fall below the curve. In this example, the curve is based on a Beta(2,2) density, and the exact area under a probability density curve is 1. As the number of simulated points increases, the estimate becomes more stable and visually more convincing. Thus, the four panels show that smaller samples look more scattered, while larger samples produce a clearer approximation of the curve and support an estimate close to 1.
+
+# Conclusion
+
+This assignment demonstrates how Quarto can combine code, figures, tables, and narrative writing into one reproducible report. Specifically, using the busiest airports example shows how real-world data can be cleaned and organized, while the Monte Carlo simulation illustrates how random sampling can be used to estimate mathematical quantities.
+
+\newpage
+
+# GenAI Usage Appendix
+
+This appendix documents my use of generative AI tools in completing this assignment.
+
+## Usage 1
+
+**Tool used:** ChatGPT  
+**Version information:** GPT-5.4 Thinking  
+**Date of usage:** April 15, 2026  
+
+**Prompt(s) used:**
+- Help me improve the organization and wording of my Quarto document.
+- Help me revise my narrative writing so it better explains the airport and Monte Carlo sections.
+- Help me fix rendering errors in my Quarto file.
+
+**Response:**
+For improving the organization and wording of the Quarto document, the tool suggested structuring the report into clear sections (Introduction, Data Cleaning, Visualization, Interpretation, and Conclusion). It recommended writing concise topic sentences at the beginning of each section and ensuring that each paragraph clearly explains the purpose of the code and results. It also suggested improving transitions between sections so that the report reads as a continuous narrative rather than separate pieces.
+
+For revising the narrative writing, the tool suggested clarifying the explanation of the busiest airports example by explicitly stating that the goal was to transform raw Wikipedia tables into a tidy dataset. It also recommended strengthening the interpretation by connecting observed trends (such as increases in passenger counts) to real-world meaning, like recovery in global air travel. For the Monte Carlo section, it suggested explaining the method step-by-step (random sampling, comparison to the curve, and estimation of area) and emphasizing that larger sample sizes produce more stable and accurate estimates.
+
+For fixing rendering errors in the Quarto file, the tool explained that objects must be created before they are used in later chunks. Specifically, it identified that the error occurred because a dataset (such as airports_tidy) was referenced before it was defined. The solution was to move all data loading and cleaning code into an earlier setup chunk so that tables and plots could access the object during rendering. It also suggested ensuring all required libraries are loaded at the top of the document and that chunk execution order follows a logical sequence from data creation to output.
+
+\newpage
+
+# Code Appendix
+
+```{r}
+#| echo: true
+#| eval: false
+
+# =========================================================
+# Setup
+# =========================================================
+rm(list = ls())
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(rvest)
+  library(janitor)
+  library(readr)
+  library(knitr)
+})
+
+# =========================================================
+# Busiest Airports Data
+# =========================================================
+wiki_url <- "https://en.wikipedia.org/wiki/List_of_busiest_airports_by_passenger_traffic"
+
+airport_tables <- wiki_url |>
+  read_html() |>
+  html_elements("table.wikitable") |>
+  html_table(fill = TRUE)
+
+years <- 2025:2020
+
+yearly_airport_data <- map2(
+  airport_tables[1:6],
+  years,
+  \(tbl, yr) {
+    tbl |>
+      clean_names() |>
+      mutate(year = yr)
+  }
+) |>
+  list_rbind()
+
+airports_tidy <- yearly_airport_data |>
+  select(year, airport, code_iata_icao, totalpassengers) |>
+  mutate(
+    airport = str_squish(str_remove_all(airport, "\\[.*?\\]")),
+    code_iata_icao = str_squish(str_remove_all(code_iata_icao, "\\[.*?\\]")),
+    totalpassengers = parse_number(totalpassengers)
+  ) |>
+  separate_wider_delim(
+    code_iata_icao,
+    delim = "/",
+    names = c("iata", "icao"),
+    too_few = "align_start"
+  )
+
+selected_airports <- c(
+  "Hartsfield-Jackson Atlanta International Airport",
+  "Frankfurt Airport",
+  "Beijing Daxing International Airport",
+  "Dubai International Airport",
+  "Tokyo Haneda Airport",
+  "Dallas Fort Worth International Airport"
+)
+
+airports_tidy <- airports_tidy |>
+  filter(airport %in% selected_airports) |>
+  rename(total_passengers = totalpassengers) |>
+  mutate(
+    airport = factor(airport, levels = selected_airports)
+  ) |>
+  arrange(airport, year) |>
+  select(year, airport, iata, icao, total_passengers)
+
+# =========================================================
+# Airports Table
+# =========================================================
+kable(airports_tidy)
+
+# =========================================================
+# Airports Plot
+# =========================================================
+ggplot(airports_tidy, aes(x = year, y = total_passengers, color = airport)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "Year",
+    y = "Total Passengers",
+    color = "Airport"
+  ) +
+  theme_minimal()
+
+# =========================================================
+# Monte Carlo Helper Function
+# =========================================================
+make_mc_plot <- function(n) {
+  set.seed(123)
+  
+  x <- runif(n, min = 0, max = 1)
+  y <- runif(n, min = 0, max = 1.5)
+  
+  curve_y <- dbeta(x, shape1 = 2, shape2 = 2)
+  point_type <- ifelse(y <= curve_y, "On/Below", "Above")
+  
+  plot_data <- tibble(
+    x = x,
+    y = y,
+    point_type = point_type
+  )
+  
+  curve_x <- seq(0, 1, length.out = 200)
+  curve_data <- tibble(
+    x = curve_x,
+    y = dbeta(curve_x, shape1 = 2, shape2 = 2)
+  )
+  
+  ggplot() +
+    geom_point(
+      data = plot_data,
+      aes(x = x, y = y, color = point_type),
+      alpha = 0.5,
+      size = 1.2
+    ) +
+    geom_line(
+      data = curve_data,
+      aes(x = x, y = y),
+      linewidth = 1
+    ) +
+    coord_cartesian(xlim = c(0, 1), ylim = c(0, 1.5)) +
+    labs(
+      title = paste("n =", n),
+      x = "x",
+      y = "y",
+      color = "Point Type"
+    ) +
+    theme_minimal()
+}
+
+# =========================================================
+# Monte Carlo Plots
+# =========================================================
+make_mc_plot(100)
+make_mc_plot(500)
+make_mc_plot(1000)
+make_mc_plot(5000)
+```
